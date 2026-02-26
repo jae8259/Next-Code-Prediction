@@ -7,10 +7,7 @@ from textual.widgets import Header, Footer, Input, Static
 from textual.screen import Screen
 from rich.syntax import Syntax
 
-from src.parser.c_parser import create_questions_from_file as create_c_questions
-from src.parser.python_parser import create_questions_from_python_file as create_py_questions
-from src.review.review_note import ReviewNoteGenerator, SimpleNoteFactory
-from src.manual_hooks import ManualHookFactory
+# Removed direct imports of parsers, review generator, and manual hook factory
 
 
 class QuizScreen(Screen):
@@ -23,25 +20,27 @@ class QuizScreen(Screen):
         ("down", "scroll_down", "Scroll Down"),
     ]
 
-    def load_questions(self, path: Path):
-        if path.suffix == ".c":
-            return create_c_questions(str(path))
-        elif path.suffix == ".py":
-            return create_py_questions(str(path))
-        else:
-            # Maybe handle other file types or show an error
-            return []
-
-    def __init__(self, file_path: str):
+    # Removed load_questions method that was dependent on file suffix directly
+    
+    def __init__(
+        self,
+        file_path: str,
+        parser_func,
+        review_generator,
+        manual_hook
+    ):
         super().__init__()
         self.file_path = file_path
         with open(file_path, "r") as f:
             self.file_lines = f.readlines()
-        self.questions = self.load_questions(file_path)
+        
+        self.parser_func = parser_func
+        self.review_generator = review_generator
+        self.manual_hook = manual_hook
+
+        self.questions = self.parser_func(str(file_path)) # Use the injected parser_func
         random.shuffle(self.questions)
         self.question_index = 0
-        self.review_generator = ReviewNoteGenerator(SimpleNoteFactory())
-        self.manual_hook_factory = ManualHookFactory()
         self.showing_answer = False
         self.start_line = 0
         self.end_line = 0
@@ -133,13 +132,11 @@ class QuizScreen(Screen):
         if not self.showing_answer:
             return
         question = self.questions[self.question_index - 1]
-
-        manual_hook = self.manual_hook_factory.get_hook("man")
-        manual_content = manual_hook.execute(question.answer)
+        
+        manual_content = self.manual_hook.execute(question.answer)
 
         self.app.bell()
-        self.query_one("#status").update(f"Showing manual for [b]{
-            question.answer}[/b]:\n{manual_content}")
+        self.query_one("#status").update(f"Showing manual for [b]{question.answer}[/b]:\n{manual_content}")
 
     def key_r(self):
         if not self.showing_answer:
@@ -147,8 +144,7 @@ class QuizScreen(Screen):
         question = self.questions[self.question_index - 1]
         if question.user_answer != question.answer and not getattr(question, 'review_note_created', False):
             note_path = self.review_generator.generate_review_note(question)
-            self.query_one("#status").update(f"Review note saved to {
-                note_path}. Press 'c' to continue.")
+            self.query_one("#status").update(f"Review note saved to {note_path}. Press 'c' to continue.")
             question.review_note_created = True
 
     def action_scroll_up(self) -> None:
@@ -166,7 +162,7 @@ class QuizScreen(Screen):
     def _update_code_display(self) -> None:
         question = self.questions[self.question_index - 1]
         code_slice = "".join(self.file_lines[self.start_line:self.end_line])
-        code_with_blank = code_slice.replace(question.answer, "■■■■■")
+        code_with_blank = code_slice.replace(question.answer, "■")
 
         code_widget = self.query_one("#code", Static)
         code_widget.update(Syntax(code_with_blank, "c" if self.file_path.suffix == '.c' else 'python',
