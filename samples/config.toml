@@ -1,0 +1,8 @@
+[parser]
+type = "python" # or "c"
+
+[review]
+type = "simple"
+
+[manual_hook]
+type = "man"
