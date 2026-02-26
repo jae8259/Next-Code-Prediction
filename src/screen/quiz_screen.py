@@ -83,7 +83,7 @@ class QuizScreen(Screen):
             self.end_line = min(len(self.file_lines), self.start_line + 10)
 
             code_slice = "".join(self.file_lines[self.start_line:self.end_line])
-            code_with_blank = code_slice.replace(question.answer, "[b red]____[/b red]")
+            code_with_blank = code_slice.replace(question.answer, "■■■■■")
             
             code_widget = self.query_one("#code", Static)
             code_widget.update(Syntax(code_with_blank, "c" if self.file_path.suffix == '.c' else 'python', theme="monokai", line_numbers=True, start_line=self.start_line + 1))
@@ -164,7 +164,7 @@ class QuizScreen(Screen):
     def _update_code_display(self) -> None:
         question = self.questions[self.question_index - 1]
         code_slice = "".join(self.file_lines[self.start_line:self.end_line])
-        code_with_blank = code_slice.replace(question.answer, "[b red]____[/b red]")
+        code_with_blank = code_slice.replace(question.answer, "■■■■■")
         
         code_widget = self.query_one("#code", Static)
         code_widget.update(Syntax(code_with_blank, "c" if self.file_path.suffix == '.c' else 'python', theme="monokai", line_numbers=True, start_line=self.start_line + 1))
