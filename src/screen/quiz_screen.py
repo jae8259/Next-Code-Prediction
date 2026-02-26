@@ -21,7 +21,7 @@ class QuizScreen(Screen):
     ]
 
     # Removed load_questions method that was dependent on file suffix directly
-    
+
     def __init__(
         self,
         file_path: str,
@@ -33,12 +33,13 @@ class QuizScreen(Screen):
         self.file_path = file_path
         with open(file_path, "r") as f:
             self.file_lines = f.readlines()
-        
+
         self.parser_func = parser_func
         self.review_generator = review_generator
         self.manual_hook = manual_hook
 
-        self.questions = self.parser_func(str(file_path)) # Use the injected parser_func
+        self.questions = self.parser_func(
+            str(file_path))  # Use the injected parser_func
         random.shuffle(self.questions)
         self.question_index = 0
         self.showing_answer = False
@@ -132,11 +133,12 @@ class QuizScreen(Screen):
         if not self.showing_answer:
             return
         question = self.questions[self.question_index - 1]
-        
         manual_content = self.manual_hook.execute(question.answer)
 
         self.app.bell()
-        self.query_one("#status").update(f"Showing manual for [b]{question.answer}[/b]:\n{manual_content}")
+        self.query_one("#status").update(
+            f"Showing manual for [b]{question.answer}[/b]:\n{manual_content}"
+        )
 
     def key_r(self):
         if not self.showing_answer:
@@ -144,7 +146,8 @@ class QuizScreen(Screen):
         question = self.questions[self.question_index - 1]
         if question.user_answer != question.answer and not getattr(question, 'review_note_created', False):
             note_path = self.review_generator.generate_review_note(question)
-            self.query_one("#status").update(f"Review note saved to {note_path}. Press 'c' to continue.")
+            self.query_one("#status").update(
+                f"Review note saved to {note_path}. Press 'c' to continue.")
             question.review_note_created = True
 
     def action_scroll_up(self) -> None:
