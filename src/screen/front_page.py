@@ -56,14 +56,24 @@ class FrontPage(Screen):
                 # Handle unknown types, perhaps show an error message on screen
                 self.query_one("#status").update(f"Configuration Error: {e}")
                 return
-        
-        # Fallback to defaults if config.toml not found or to use general defaults
-        if parser_func is None:
-            parser_func = ParserFactory().get_parser(file_path.suffix.lstrip('.'))
-        if review_generator is None:
+        else: # If config.toml does not exist, use defaults based on file extension
+            suffix = file_path.suffix.lstrip('.')
+            if suffix == 'c':
+                parser_func = ParserFactory().get_parser("c_treesitter")
+            elif suffix == 'py':
+                parser_func = ParserFactory().get_parser("python")
+            else:
+                self.query_one("#status").update(f"No config.toml found and unknown file type for: {file_path}")
+                return
+
             review_generator = ReviewFactory().get_review_generator("simple")
-        if manual_hook is None:
             manual_hook = ManualHookFactory().get_hook("man")
+            
+        # If parser_func is still None at this point, it means config.toml existed but didn't specify a parser,
+        # or there was an error in config parsing that was caught. In such cases, we should not proceed.
+        if parser_func is None:
+            self.query_one("#status").update(f"Could not determine parser for file: {file_path}")
+            return
 
         self.app.push_screen(
             QuizScreen(
