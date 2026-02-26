@@ -10,7 +10,7 @@ import re
 # sys.path.extend(['.', '..']) # Removed as it's not needed if installed via uv
 
 from pycparser import c_parser, c_ast #, parse_file # parse_file is not directly used here
-from src.review_note import FunctionQuestion
+from src.review.review_note import FunctionQuestion
 
 
 class FuncCallVisitor(c_ast.NodeVisitor):

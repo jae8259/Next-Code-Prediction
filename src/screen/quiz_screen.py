@@ -10,7 +10,7 @@ from rich.syntax import Syntax
 
 from src.parser.c_parser import create_questions_from_file as create_c_questions
 from src.parser.python_parser import create_questions_from_python_file as create_py_questions
-from src.review_note import ReviewNoteGenerator, SimpleNoteFactory
+from src.review.review_note import ReviewNoteGenerator, SimpleNoteFactory
 
 
 class QuizScreen(Screen):

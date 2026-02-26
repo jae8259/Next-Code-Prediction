@@ -1,6 +1,6 @@
 import ast
 from typing import List
-from src.review_note import FunctionQuestion
+from src.review.review_note import FunctionQuestion
 
 class FuncCallVisitor(ast.NodeVisitor):
     def __init__(self, lines):
