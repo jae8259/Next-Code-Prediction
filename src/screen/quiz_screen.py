@@ -9,6 +9,8 @@ from rich.syntax import Syntax
 
 # Removed direct imports of parsers, review generator, and manual hook factory
 
+LINE_WINDOW = 30
+
 
 class QuizScreen(Screen):
     """The main quiz screen."""
@@ -81,7 +83,8 @@ class QuizScreen(Screen):
                     break
 
             self.start_line = max(0, answer_line - 5)
-            self.end_line = min(len(self.file_lines), self.start_line + 10)
+            self.end_line = min(len(self.file_lines),
+                                self.start_line + LINE_WINDOW)
 
             code_slice = "".join(
                 self.file_lines[self.start_line:self.end_line])
@@ -153,13 +156,13 @@ class QuizScreen(Screen):
     def action_scroll_up(self) -> None:
         if self.start_line > 0:
             self.start_line = max(0, self.start_line - 1)
-            self.end_line = self.start_line + 10
+            self.end_line = self.start_line + LINE_WINDOW
             self._update_code_display()
 
     def action_scroll_down(self) -> None:
         if self.end_line < len(self.file_lines):
             self.end_line = min(len(self.file_lines), self.end_line + 1)
-            self.start_line = self.end_line - 10
+            self.start_line = self.end_line - LINE_WINDOW
             self._update_code_display()
 
     def _update_code_display(self) -> None:
