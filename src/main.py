@@ -1,3 +1,5 @@
+import argparse
+
 from src.screen.front_page import FrontPage
 from textual.app import App
 from src.screen.quiz_screen import QuizScreen
@@ -21,6 +23,10 @@ class QuizApp(App):
 
 
 if __name__ == "__main__":
-    setup_logging()
+    parser = argparse.ArgumentParser(description="A terminal quiz app for C and Python code.")
+    parser.add_argument("--log", action="store_true", help="Enable logging to file and console.")
+    args = parser.parse_args()
+
+    setup_logging(args.log)
     app = QuizApp()
     app.run()

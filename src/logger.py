@@ -2,7 +2,15 @@ import logging
 import os
 from datetime import datetime
 
-def setup_logging():
+def setup_logging(enable_logging: bool = True):
+    if not enable_logging:
+        # Disable all logging
+        logging.getLogger().setLevel(logging.CRITICAL)
+        # Remove any existing handlers to prevent output
+        for handler in logging.getLogger().handlers[:]:
+            logging.getLogger().removeHandler(handler)
+        return
+
     log_directory = "logs"
     os.makedirs(log_directory, exist_ok=True)
 
@@ -22,5 +30,10 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 if __name__ == "__main__":
-    logger = setup_logging()
-    logger.info("This is a test log message from logger.py")
+    # Test case for when logging is enabled
+    logger_enabled = setup_logging(enable_logging=True)
+    logger_enabled.info("This is a test log message from logger.py with logging ENABLED.")
+
+    # Test case for when logging is disabled
+    logger_disabled = setup_logging(enable_logging=False)
+    logger_disabled.info("This is a test log message from logger.py with logging DISABLED. (Should not appear)")
