@@ -600,8 +600,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "textual", specifier = ">=8.0.0" },
-    { name = "textual-dev", specifier = ">=1.8.0" },
+    { name = "textual", specifier = ">=0.58.0" },
+    { name = "textual-dev", specifier = ">=1.5.1" },
 ]
 
 [[package]]
