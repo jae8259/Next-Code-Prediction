@@ -1,5 +1,5 @@
 [parser]
-type = "python" # or "c"
+type = "c_treesitter" # or "c"
 
 [review]
 type = "simple"
