@@ -10,8 +10,8 @@ from textual.screen import Screen
 from rich.syntax import Syntax
 from rich.text import Text
 
-from src.c_parser import create_questions_from_file as create_c_questions
-from src.python_parser import create_questions_from_python_file as create_py_questions
+from src.parser.c_parser import create_questions_from_file as create_c_questions
+from src.parser.python_parser import create_questions_from_python_file as create_py_questions
 from src.review_note import ReviewNoteGenerator, SimpleNoteFactory
 
 ROOT_DIR = Path(__file__).parent.parent
@@ -50,7 +50,7 @@ class FrontPage(Screen):
 class QuizScreen(Screen):
     """The main quiz screen."""
 
-    CSS_PATH = "app.css"
+    CSS_PATH = "style/app.css"
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
     ]
