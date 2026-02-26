@@ -1,215 +1,144 @@
-import ast
-import operator
-import sys
-import argparse
 import os
+import subprocess
+import random
 
-# Blanking levels
-BLANK_FUNCTION_NAME_ARGS = 1
-BLANK_WHOLE_FUNCTION = 2
+from textual.app import App, ComposeResult
+from textual.containers import Container
+from textual.widgets import Header, Footer, Input, Static
+from rich.syntax import Syntax
+from pathlib import Path
+from textual.binding import Binding
 
-class CodeBlanker(ast.NodeVisitor):
-    def __init__(self, original_code, blanking_level):
-        self.original_code_lines = original_code.splitlines(keepends=True)
-        self.blanks = []
-        self.blanking_level = blanking_level
+from src.c_parser import create_questions_from_file
+from src.review_note import ReviewNoteGenerator, SimpleNoteFactory
 
-    def visit_FunctionDef(self, node):
-        if self.blanking_level == BLANK_WHOLE_FUNCTION:
-            # Blank the entire function definition
-            self._add_blank_target(
-                start_lineno=node.lineno - 1,
-                start_col_offset=node.col_offset,
-                end_lineno=node.end_lineno - 1,
-                end_col_offset=node.end_col_offset,
-                identifier=node.name,
-                blank_type="whole_function"
-            )
-        elif self.blanking_level == BLANK_FUNCTION_NAME_ARGS:
-            # Blank the function name only
-            func_def_line = self.original_code_lines[node.lineno - 1]
-            name_start_col = func_def_line.find(node.name, node.col_offset)
-            name_end_col = name_start_col + len(node.name)
+ROOT_DIR = Path(__file__).parent.parent
+SOURCE_CODE_PATH = ROOT_DIR / "samples/rdma-example/src/rdma_server.c"
 
-            self._add_blank_target(
-                start_lineno=node.lineno - 1,
-                start_col_offset=name_start_col,
-                end_lineno=node.lineno - 1,
-                end_col_offset=name_end_col,
-                identifier=node.name,
-                blank_type="function_name"
-            )
+class QuizApp(App):
+    """A terminal quiz app for C code."""
 
-            # Blank function arguments
-            for arg_node in node.args.args:
-                self._add_blank_target(
-                    start_lineno=arg_node.lineno - 1,
-                    start_col_offset=arg_node.col_offset,
-                    end_lineno=arg_node.end_lineno - 1,
-                    end_col_offset=arg_node.end_col_offset,
-                    identifier=arg_node.arg,
-                    blank_type="function_argument"
-                )
+    CSS_PATH = "app.css"
+    BINDINGS = [
+        Binding("c", "next_question", "Continue", show=True),
+        Binding("m", "show_manual", "Manual", show=True),
+        Binding("r", "make_review_note", "Review Note", show=True),
+        Binding("ctrl+c", "quit", "Quit"),
+        Binding("escape", "quit", "Quit", show=False, priority=True),
+        Binding("k", "scroll_up", "Scroll Up", show=False, priority=True),
+        Binding("j", "scroll_down", "Scroll Down", show=False, priority=True),
+    ]
 
-        self.generic_visit(node)
+    def __init__(self):
+        super().__init__()
+        self.questions = create_questions_from_file(str(SOURCE_CODE_PATH))
+        random.shuffle(self.questions)
+        self.question_index = 0
+        self.review_generator = ReviewNoteGenerator(SimpleNoteFactory())
+        self.showing_answer = False
 
-    def _add_blank_target(self, start_lineno, start_col_offset, end_lineno, end_col_offset, identifier, blank_type):
-        original_text_lines = []
-        if start_lineno == end_lineno:
-            original_text_lines.append(self.original_code_lines[start_lineno][start_col_offset:end_col_offset])
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Container(id="quiz-container"):
+            with Container(id="code-view"):
+                yield Static(id="code")
+            yield Input(placeholder="Your answer...", id="answer-input")
+            yield Static("", id="status")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        """Called when the app is first mounted."""
+        self.next_question()
+
+    def next_question(self):
+        """Loads and displays the next question."""
+        self.showing_answer = False
+        self.query_one("#status").update()
+        self.query_one("#answer-input").disabled = False
+
+
+        if self.question_index < len(self.questions):
+            question = self.questions[self.question_index]
+            
+            # Highlight the blank
+            code = question.context.replace(question.answer, "[b red]____[/b red]")
+
+            code_widget = self.query_one("#code", Static)
+            code_widget.update(Syntax(code, "c", theme="monokai", line_numbers=True))
+            
+            self.query_one("#answer-input").value = ""
+            self.query_one("#answer-input").focus()
+            self.question_index += 1
         else:
-            original_text_lines.append(self.original_code_lines[start_lineno][start_col_offset:])
-            for i in range(start_lineno + 1, end_lineno):
-                original_text_lines.append(self.original_code_lines[i])
-            # Handle cases where end_col_offset is 0, meaning it blanks till the end of line
-            # or if it's a multi-line blank, it might end before the end of the line
-            if end_col_offset > 0: # Only append if there's actual content to append from the end line
-                original_text_lines.append(self.original_code_lines[end_lineno][:end_col_offset])
-            else:
-                # If end_col_offset is 0 and it's not a single line blank, it implies the rest of the line is blanked
-                # This could happen if the blank ends exactly at the start of the last line
-                pass
-
-        original_text = "".join(original_text_lines).strip()
-
-        self.blanks.append({
-            'start_lineno': start_lineno,
-            'start_col_offset': start_col_offset,
-            'end_lineno': end_lineno,
-            'end_col_offset': end_col_offset,
-            'original_text': original_text,
-            'identifier': identifier,
-            'blank_type': blank_type,
-            'placeholder': '_______'
-        })
+            self.query_one("#status").update("Quiz finished! Press Ctrl+C to exit.")
+            self.query_one("#answer-input").disabled = True
 
 
-def generate_blank_quiz(code_string, blanking_level=BLANK_FUNCTION_NAME_ARGS):
-    tree = ast.parse(code_string)
-    blanker = CodeBlanker(code_string, blanking_level)
-    blanker.visit(tree)
-
-    # Sort blanks by their position in reverse order to avoid issues with
-    # shifting indices when performing replacements.
-    sorted_blanks = sorted(
-        blanker.blanks,
-        key=operator.itemgetter('start_lineno', 'start_col_offset'),
-        reverse=True
-    )
-
-    blanked_code_lines = list(blanker.original_code_lines) # Make a mutable copy
-
-    for blank in sorted_blanks:
-        start_lineno = blank['start_lineno']
-        start_col = blank['start_col_offset']
-        end_lineno = blank['end_lineno']
-        end_col = blank['end_col_offset']
-        placeholder = blank['placeholder']
-
-        if start_lineno == end_lineno:
-            line = blanked_code_lines[start_lineno]
-            blanked_code_lines[start_lineno] = \
-                line[:start_col] + placeholder + line[end_col:]
-        else:
-            # Handle multi-line blanks
-            # Replace the part of the starting line with the placeholder
-            blanked_code_lines[start_lineno] = \
-                blanked_code_lines[start_lineno][:start_col] + placeholder
-
-            # Blank out full intermediate lines (if any)
-            for i in range(start_lineno + 1, end_lineno):
-                blanked_code_lines[i] = '\n' # Replace with a newline to signify blanked content, preserving line count
-
-            # Replace the part of the ending line after the blank
-            if end_col > 0:
-                blanked_code_lines[end_lineno] = blanked_code_lines[end_lineno][end_col:]
-            else: # If end_col is 0, it means the blank extends to the end of the line
-                blanked_code_lines[end_lineno] = '\n' # Replace the whole line with a newline
-
-
-    return "".join(blanked_code_lines), blanker.blanks
-
-def run_quiz(blanked_code, blanks):
-    score = 0
-    total_blanks = len(blanks)
-
-    print("\n--- Starting Quiz ---")
-    print("Fill in the blanks. Type 'quit' to exit at any time.")
-    print("-" * 30)
-
-    # Create a dynamic representation of the code for progressive filling
-    current_code_lines = blanked_code.splitlines(keepends=True)
-
-    for i, blank in enumerate(blanks):
-        # Clear screen for a cleaner presentation
-        os.system('cls' if os.name == 'nt' else 'clear')
-
-        print(f"\nBlank {i+1} of {total_blanks}:")
-        print("--------------------")
-        
-        # Display current state of the code
-        print("".join(current_code_lines))
-
-        user_answer = input(f"Your answer for '{blank['identifier']}' ({blank['blank_type']}): ").strip()
-        
-        if user_answer.lower() == 'quit':
-            print("Quiz exited.")
+    def on_input_submitted(self, message: Input.Submitted) -> None:
+        """Handle answer submission."""
+        if self.showing_answer:
+            self.action_next_question()
             return
 
-        if user_answer == blank['original_text']:
-            print("Correct!")
-            score += 1
-            # Update the current_code_lines to show the filled blank
-            start_lineno = blank['start_lineno']
-            start_col = blank['start_col_offset']
-            end_lineno = blank['end_lineno']
-            end_col = blank['end_col_offset']
+        answer = message.value.strip()
+        question = self.questions[self.question_index - 1]
+        question.user_answer = answer
 
-            if start_lineno == end_lineno:
-                line = current_code_lines[start_lineno]
-                current_code_lines[start_lineno] = \
-                    line[:start_col] + user_answer + line[end_col:]
-            else:
-                # For multi-line blanks, this is a simplified fill.
-                # It replaces the placeholder on the first line and then adds original content.
-                # A more complex solution might rebuild the block.
-                current_code_lines[start_lineno] = \
-                    current_code_lines[start_lineno][:start_col] + user_answer
-
-                # Restore intermediate lines and end line content
-                original_blank_lines = blank['original_text'].splitlines(keepends=True)
-                for j in range(len(original_blank_lines)):
-                    if (start_lineno + j) <= end_lineno:
-                         current_code_lines[start_lineno + j] = original_blank_lines[j]
-                    
+        if answer == question.answer:
+            self.query_one("#status").update("[green]Correct![/green] Press 'c' to continue.")
+            self.showing_answer = True
         else:
-            print(f"Incorrect. The correct answer was: '{blank['original_text']}'")
-        input("Press Enter to continue...") # Pause for user to read feedback
+            status_message = (
+                f"[red]Incorrect.[/red]\n"
+                f"Your answer: {answer}\n"
+                f"Correct answer: [b]{question.answer}[/b]\n\n"
+                "Press 'c' to continue, 'm' for manual, or 'r' for a review note."
+            )
+            self.query_one("#status").update(status_message)
+            self.showing_answer = True
+        
+        self.query_one("#answer-input").disabled = True
 
-    print("-" * 30)
-    print(f"Quiz complete! Your final score: {score}/{total_blanks}")
-    print("-" * 30)
+    def action_next_question(self) -> None:
+        if self.showing_answer:
+            self.next_question()
+
+    def action_make_review_note(self) -> None:
+        if not self.showing_answer:
+            return
+        question = self.questions[self.question_index - 1]
+        # Only allow review notes for incorrect answers
+        if question.user_answer != question.answer and not getattr(question, 'review_note_created', False):
+            note_path = self.review_generator.generate_review_note(question)
+            self.query_one("#status").update(f"Review note saved to {note_path}. Press 'c' to continue.")
+            question.review_note_created = True
+
+
+    def action_show_manual(self) -> None:
+        if not self.showing_answer:
+            return
+        question = self.questions[self.question_index - 1]
+        try:
+            process = subprocess.run(["man", question.answer], capture_output=True, text=True, check=True)
+            manual_content = process.stdout
+            # For now, just print to a log. A modal screen would be better.
+            self.app.bell()
+            self.query_one("#status").update(f"Showing man page for {question.answer}. Check terminal output. Press 'c' to continue.")
+            print("\n" + "="*80)
+            print(manual_content)
+            print("="*80)
+            print("Scroll up to view the manual. Press 'c' in the app to continue.")
+
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.query_one("#status").update(f"No manual provided for [b]{question.answer}[/b]. Press 'c' to continue.")
+
+    def action_scroll_up(self) -> None:
+        self.query_one("#code-view").scroll_up()
+
+    def action_scroll_down(self) -> None:
+        self.query_one("#code-view").scroll_down()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate and play a blank code quiz.")
-    parser.add_argument("file", help="Path to the Python code file.")
-    parser.add_argument("--level", type=int, default=BLANK_FUNCTION_NAME_ARGS,
-                        help=f"Blanking level: {BLANK_FUNCTION_NAME_ARGS} for function names/args, "
-                             f"{BLANK_WHOLE_FUNCTION} for whole functions. Default: {BLANK_FUNCTION_NAME_ARGS}")
-
-    args = parser.parse_args()
-
-    try:
-        with open(args.file, 'r') as f:
-            code_content = f.read()
-    except FileNotFoundError:
-        print(f"Error: File '{args.file}' not found.")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error reading file: {e}")
-        sys.exit(1)
-
-    print(f"Generating quiz for '{args.file}' with blanking level {args.level}...")
-    blanked_code, blanks = generate_blank_quiz(code_content, blanking_level=args.level)
-    run_quiz(blanked_code, blanks)
+    app = QuizApp()
+    app.run()
