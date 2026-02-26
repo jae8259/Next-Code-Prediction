@@ -19,6 +19,8 @@ class QuizScreen(Screen):
     CSS_PATH = "../style/app.css"
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
+        ("up", "scroll_up", "Scroll Up"),
+        ("down", "scroll_down", "Scroll Down"),
     ]
 
     def load_questions(self, path: Path):
@@ -33,11 +35,15 @@ class QuizScreen(Screen):
     def __init__(self, file_path: str):
         super().__init__()
         self.file_path = file_path
+        with open(file_path, "r") as f:
+            self.file_lines = f.readlines()
         self.questions = self.load_questions(file_path)
         random.shuffle(self.questions)
         self.question_index = 0
         self.review_generator = ReviewNoteGenerator(SimpleNoteFactory())
         self.showing_answer = False
+        self.start_line = 0
+        self.end_line = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -66,10 +72,21 @@ class QuizScreen(Screen):
         if self.question_index < len(self.questions):
             question = self.questions[self.question_index]
             
-            code_with_blank = question.context.replace(question.answer, "[b red]____[/b red]")
+            # Find the line number of the answer
+            answer_line = -1
+            for i, line in enumerate(self.file_lines):
+                if question.answer in line:
+                    answer_line = i
+                    break
+            
+            self.start_line = max(0, answer_line - 5)
+            self.end_line = min(len(self.file_lines), self.start_line + 10)
+
+            code_slice = "".join(self.file_lines[self.start_line:self.end_line])
+            code_with_blank = code_slice.replace(question.answer, "[b red]____[/b red]")
             
             code_widget = self.query_one("#code", Static)
-            code_widget.update(Syntax(code_with_blank, "c" if self.file_path.suffix == '.c' else 'python', theme="monokai", line_numbers=True))
+            code_widget.update(Syntax(code_with_blank, "c" if self.file_path.suffix == '.c' else 'python', theme="monokai", line_numbers=True, start_line=self.start_line + 1))
             
             self.query_one("#answer-input").value = ""
             self.query_one("#answer-input").focus()
@@ -132,8 +149,22 @@ class QuizScreen(Screen):
             self.query_one("#status").update(f"Review note saved to {note_path}. Press 'c' to continue.")
             question.review_note_created = True
 
-    def key_up(self) -> None:
-        self.query_one("#code-view").scroll_up()
+    def action_scroll_up(self) -> None:
+        if self.start_line > 0:
+            self.start_line = max(0, self.start_line - 1)
+            self.end_line = self.start_line + 10
+            self._update_code_display()
 
-    def key_down(self) -> None:
-        self.query_one("#code-view").scroll_down()
+    def action_scroll_down(self) -> None:
+        if self.end_line < len(self.file_lines):
+            self.end_line = min(len(self.file_lines), self.end_line + 1)
+            self.start_line = self.end_line - 10
+            self._update_code_display()
+
+    def _update_code_display(self) -> None:
+        question = self.questions[self.question_index - 1]
+        code_slice = "".join(self.file_lines[self.start_line:self.end_line])
+        code_with_blank = code_slice.replace(question.answer, "[b red]____[/b red]")
+        
+        code_widget = self.query_one("#code", Static)
+        code_widget.update(Syntax(code_with_blank, "c" if self.file_path.suffix == '.c' else 'python', theme="monokai", line_numbers=True, start_line=self.start_line + 1))

@@ -41,7 +41,7 @@ Screen {
     width: 100%;
     height: 70%;
     border-bottom: solid $primary;
-    overflow-y: scroll;
+    overflow-y: auto;
 }
 
 #code {
